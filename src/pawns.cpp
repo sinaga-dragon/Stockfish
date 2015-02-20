@@ -58,6 +58,12 @@ namespace {
     S( 0, 0), S( 0, 0), S(0, 0), S(0, 0),
     S(20,20), S(40,40), S(0, 0), S(0, 0) };
 
+   // iLevers bonus to inners lever / attacking toward centre
+   const Score iLeverScore     = S( 9, 1) ;
+
+   // Penalty for backward pawn based on distance
+   const Score backwardpenalty = S( 5, 4) ;  
+
   // Unsupported pawn penalty
   const Score UnsupportedPawnPenalty = S(20, 10);
 
@@ -112,6 +118,7 @@ namespace {
 
     Bitboard b, p, doubled, connected;
     Square s;
+    Square TargetSQ = (Us == WHITE ? SQ_E1   : SQ_E8);
     bool passed, isolated, opposed, phalanx, backward, unsupported, lever;
     Score score = SCORE_ZERO;
     const Square* pl = pos.list<PAWN>(Us);
@@ -119,6 +126,12 @@ namespace {
 
     Bitboard ourPawns   = pos.pieces(Us  , PAWN);
     Bitboard theirPawns = pos.pieces(Them, PAWN);
+
+    Bitboard Lmask     = (Us == WHITE ? 0x00f0f0f0f0f0f0f0fULL   : 0x00f0f0f0f0f0f0f0f0ULL);
+    Bitboard Rmask     = (Us == WHITE ? 0x00f0f0f0f0f0f0f0f0ULL  : 0x00f0f0f0f0f0f0f0fULL );
+
+    Bitboard ourLPawns  = ourPawns & Lmask;
+    Bitboard ourRPawns  = ourPawns & Rmask;
 
     e->passedPawns[Us] = 0;
     e->kingSquares[Us] = SQ_NONE;
@@ -191,13 +204,20 @@ namespace {
             score -= Doubled[f] / distance<Rank>(s, frontmost_sq(Us, doubled));
 
         if (backward)
-            score -= Backward[opposed][f];
+        {
+          score -= 3 * Backward[opposed][f] / 5;
+          score -= backwardpenalty * distance (s, pos.king_square (Us));
+        }
 
         if (connected)
             score += Connected[opposed][phalanx][relative_rank(Us, s)];
 
         if (lever)
-            score += Lever[relative_rank(Us, s)];
+        {
+          score += Lever[relative_rank(Us, s)];
+          if ((shift_bb<Right>(ourLPawns) | shift_bb<Left>(ourRPawns))& SquareBB[s]);
+             score += iLeverScore * distance<Rank> ( s, TargetSQ );
+        }
     }
 
     b = e->semiopenFiles[Us] ^ 0xFF;
